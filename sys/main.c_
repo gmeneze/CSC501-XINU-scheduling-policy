@@ -1,0 +1,45 @@
+#include <conf.h>
+#include <kernel.h>
+#include <stdio.h>
+#include <proc.h>
+#include <q.h>
+#include <lab1.h>
+
+#define LOOP 50
+
+int prA, prB, prC;
+int proc(char c);
+
+int main() {
+
+    int i;
+    int count = 0;
+
+setschedclass(LINUXSCHED);
+
+    /* Linux like Scheduler */  
+      resume(prA = create(proc, 2000, 40, "proc A", 1, 'A')); 
+      resume(prB = create(proc, 2000, 50, "proc B", 1, 'B'));
+      resume(prC = create(proc, 2000, 90, "proc C", 1, 'C'));  
+    while (count++ < LOOP) {
+        kprintf("M");
+        for (i = 0; i < 10000000; i++)
+            ;    
+}
+kprintf(" M End");
+
+    return 0;
+}
+
+int proc(char c) {
+    int i;
+    int count = 0;
+
+    while (count++ < LOOP) {
+        kprintf("%c", c);
+        for (i = 0; i < 10000000; i++)
+            ;
+    }
+	kprintf(" %c end",c);
+    return 0;
+}

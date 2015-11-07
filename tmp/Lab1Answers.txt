@@ -1,0 +1,20 @@
+What are the advantages and disadvantages of each of the two scheduling policies and the original scheduling policy in XINU?
+
+Advantages of XINU policy -
+Easy logic, easy to understand and implement.
+Process with highest priority gets executed first.
+
+Disadvantage of XINU policy -
+Starvation, lower priority processes don't get enough execution time and maybe denied execution time completely if a high priority process is running.
+
+Linux Scheduler advantages -
+Starvation is low, even low priority process get execution time.
+
+Disadvantage of Linux Scheduler -
+Takes lots of time - overhead with regards to computation.
+
+Advantages of Multi-queue scheduler -
+Real time processes get more execution time, normal processes do not starve.
+
+Disadvantages of Multiqueue scheduler -
+Random number generation is used, its probabilistic, dependent on seed value.

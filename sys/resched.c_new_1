@@ -1,0 +1,218 @@
+/* resched.c  -  resched */
+
+#include <conf.h>
+#include <kernel.h>
+#include <proc.h>
+#include <q.h>
+#include <lab1.h>
+
+int flag;
+unsigned long currSP;	/* REAL sp of current process */
+extern int ctxsw(int, int, int, int);
+void linux_sched();
+void roundrobin_sched();
+void setschedclass(int sched_class);
+int getschedclass();
+/*-----------------------------------------------------------------------
+ * resched  --  reschedule processor to highest priority ready process
+ *
+ * Notes:	Upon entry, currpid gives current process id.
+ *		Proctab[currpid].pstate gives correct NEXT state for
+ *			current process if other than PRREADY.
+ *------------------------------------------------------------------------
+ */
+int epoch_time;
+int queue_index;
+int index;
+int max_goodness_index;
+int current_scheduler=1;
+int routine_ind=0;
+int rr_queue_index; 
+int rr_queue_size;
+int resched()
+{
+        if(epoch_time==0)
+        {
+           if(current_scheduler==LINUXSCHED)
+           {
+//               kprintf("Glen - 0\n");
+               routine_ind=0;
+               linux_sched(); 
+           }
+           else
+           {
+        
+//              kprintf("Glen - 1 \n"); 
+              if( rand()%10 >= 3 )
+              {
+//                  kprintf("Glen - 2 \n");
+                  routine_ind=1;
+                  roundrobin_sched();
+              }
+              else
+              {
+//                kprintf("Glen - 3 \n"); 
+                  routine_ind=0; 
+                  linux_sched();   
+              }
+           }
+        }
+        else
+        {
+              if(routine_ind==0)
+                  linux_sched();
+              else
+                  roundrobin_sched();
+        } 
+
+        return 0;
+} 
+
+void roundrobin_sched()
+{
+register struct pentry  *optr;  /* pointer to old process entry */
+register struct pentry  *nptr;  /* pointer to new process entry */
+kprintf("In RR epoch_time <%d> pid <%d> pname: <%s> \n",epoch_time,currpid, proctab[currpid].pname);
+       if(epoch_time==0)
+       {
+//           kprintf("Glen in if loop \n");
+//           kprintf("Glen queue index: <%d> \n",queue_index);
+           rr_queue_index=0;
+           rr_queue_size=0;
+           int i; 
+           for(i=0;i<queue_index;i++)
+           {
+                round_robin_queue[i].pid=0; 
+                if(proctab[queue_list[i].pid].pstate==PRREADY || proctab[queue_list[i].pid].pstate==PRCURR)        	 
+                {
+                     round_robin_queue[rr_queue_size].pid=queue_list[i].pid;
+                     kprintf("Selected pid : <%d> , size:<%d>\n", round_robin_queue[rr_queue_size].pid, rr_queue_size);
+                     rr_queue_size++;
+                     epoch_time+=100;
+                }
+
+            } 
+       }
+
+        if(epoch_time > 0 && rr_queue_index < rr_queue_size)
+        {
+           epoch_time-=100;      
+
+        optr= &proctab[currpid];
+
+        nptr=&proctab[round_robin_queue[rr_queue_index].pid];
+
+           if (proctab[currpid].pstate == PRCURR) {
+               proctab[currpid].pstate = PRREADY;
+           }
+
+        currpid = round_robin_queue[rr_queue_index].pid;
+        nptr->pstate=PRCURR;
+
+        rr_queue_index++;
+
+#ifdef  RTCLOCK
+        preempt = 100;              /* reset preemption counter     */
+#endif
+
+        ctxsw((int)&optr->pesp, (int)optr->pirmask, (int)&nptr->pesp, (int)nptr->pirmask);
+ }
+
+}
+
+void linux_sched()
+{
+kprintf("In linuxsched epoch time <%d> pid is <%d> \n",epoch_time,currpid);
+register struct pentry  *optr;  /* pointer to old process entry */
+register struct pentry  *nptr;  /* pointer to new process entry */
+
+    int preempt_val;
+    preempt_val=0;
+ 
+    if(epoch_time==0)
+    {
+        index=0;
+        int pid;
+        for (pid=1 ; pid<NPROC ; pid++) /* check all NPROC slots */
+        {
+            epoch_list[index].pid=0;
+            epoch_list[index].counter=0;
+            epoch_list[index].goodness=0;
+
+            if (proctab[pid].pstate == PRREADY || proctab[pid].pstate == PRCURR)
+            {
+                    epoch_list[index].pid=pid;
+                    epoch_list[index].counter=proctab[pid].pprio;
+                    epoch_list[index].goodness=epoch_list[index].counter+proctab[pid].pprio;
+                    index++;
+                    epoch_time+=proctab[pid].pprio;
+            }
+        }
+     }
+
+     optr= &proctab[currpid];
+
+     int max=0; 
+     max_goodness_index=0;
+     int i;
+     for(i=0; i<index; i++)
+     {
+         if (epoch_list[i].goodness > max) 
+         {
+         	max=epoch_list[i].goodness;
+                max_goodness_index=i;
+         }       		 
+     }
+
+     if(epoch_list[max_goodness_index].counter>=10)
+   	{
+  	   preempt_val=10; // change to QUANTUM
+	}
+	else
+        {
+	   preempt_val=epoch_list[max_goodness_index].counter;
+        }
+
+        epoch_list[max_goodness_index].counter-=preempt_val;
+
+        if(epoch_list[max_goodness_index].counter>0)
+        {
+		epoch_list[max_goodness_index].goodness-=preempt_val;
+        }
+        else
+        {
+        	epoch_list[max_goodness_index].goodness=0;
+        } 
+
+   if (epoch_time > 0)
+   { 
+        epoch_time-=preempt_val;
+        nptr=&proctab[epoch_list[max_goodness_index].pid];
+
+//     if(currpid!=epoch_list[max_goodness_index].pid)
+//    {
+           if (proctab[currpid].pstate == PRCURR) {
+               proctab[currpid].pstate = PRREADY;
+           }
+
+          currpid = epoch_list[max_goodness_index].pid;
+//          proctab[currpid].pstate = PRCURR;
+          nptr->pstate=PRCURR;
+ //   } 
+
+#ifdef  RTCLOCK
+        preempt = preempt_val;              /* reset preemption counter     */
+#endif
+        ctxsw((int)&optr->pesp, (int)optr->pirmask, (int)&nptr->pesp, (int)nptr->pirmask);
+    }
+}
+
+void setschedclass(int sched_class)
+{
+   current_scheduler=sched_class;
+}
+
+int getschedclass() 
+{
+   return current_scheduler;
+}
